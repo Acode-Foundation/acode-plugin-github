@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'"
+    >
+    <title>Return to Acode</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./setup.mjs"></script>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">&lt;/&gt;</div>
+      <h1>Repository access updated</h1>
+      <p>
+        Return to Acode to refresh the repositories available to the GitHub
+        plugin.
+      </p>
+      <a
+        class="primary"
+        data-open-acode
+        href="acode://github/setup/complete"
+      >
+        Return to Acode
+      </a>
+      <p class="fallback">
+        If Acode does not open, make sure the
+        <a
+          href="https://acode.app/plugin/acode.plugin.github"
+          rel="noreferrer"
+        >GitHub plugin</a>
+        is installed and try again.
+      </p>
+    </main>
+  </body>
+</html>

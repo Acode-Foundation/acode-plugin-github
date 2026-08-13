@@ -1,0 +1,75 @@
+:root {
+  color-scheme: light dark;
+  font-family:
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: Canvas;
+  color: CanvasText;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  display: grid;
+  min-height: 100vh;
+  margin: 0;
+  padding: 24px;
+  place-items: center;
+}
+
+main {
+  width: min(100%, 420px);
+  text-align: center;
+}
+
+.mark {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 24px;
+  border-radius: 16px;
+  background: #1976d2;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 700;
+  place-items: center;
+}
+
+h1 {
+  margin: 0 0 12px;
+  font-size: 1.65rem;
+  line-height: 1.2;
+}
+
+p {
+  margin: 0;
+  line-height: 1.55;
+  opacity: 0.78;
+}
+
+.primary {
+  display: block;
+  min-height: 48px;
+  margin: 28px 0 20px;
+  padding: 13px 20px;
+  border-radius: 8px;
+  background: #1976d2;
+  color: #ffffff;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.primary:focus-visible,
+.primary:hover {
+  outline: 3px solid color-mix(in srgb, #1976d2 45%, transparent);
+  outline-offset: 3px;
+}
+
+.fallback {
+  font-size: 0.9rem;
+}
+
+.fallback a {
+  color: LinkText;
+}
