@@ -10,9 +10,33 @@ const prompt = acode.require('prompt');
 const encodings = acode.require('encodings');
 
 const test = (url) => /^gh:/.test(url);
+const REGISTRY_KEY = '__acodeGithubFsTests__';
+
+function _isZh() {
+  try {
+    const langs = [].concat(navigator.languages || [], navigator.language || []);
+    return langs.some((l) => /^zh(?:-|$)/i.test(String(l || '')));
+  } catch (_) { return false; }
+}
+function _t(en, zh) { return _isZh() ? zh : en; }
+
+function getRegistry() {
+  if (!window[REGISTRY_KEY]) {
+    window[REGISTRY_KEY] = [];
+  }
+  return window[REGISTRY_KEY];
+}
+
+function removeAllGithubFsHandlers() {
+  const registry = getRegistry();
+  registry.forEach((registeredTest) => {
+    try { fsOperation.remove(registeredTest); } catch (_) {}
+  });
+  registry.length = 0;
+}
 
 githubFs.remove = () => {
-  fsOperation.remove(test);
+  removeAllGithubFsHandlers();
 };
 
 /**
@@ -41,6 +65,10 @@ githubFs.constructUrl = (type, user, repo, path, branch) => {
 };
 
 export default function githubFs(token, settings) {
+  // Ensure only one active gh:// handler even after plugin hot-reloads.
+  removeAllGithubFsHandlers();
+  getRegistry().push(test);
+
   fsOperation.extend(test, (url) => {
     const { user, type, repo, path, gist } = parseUrl(url);
     if (type === 'repo') {
@@ -92,9 +120,9 @@ export default function githubFs(token, settings) {
    */
   async function getCommitMessage(message) {
     if (settings.askCommitMessage) {
-      const res = await prompt('Commit message', message, 'text');
+      const res = await prompt(_t('Commit message', '提交信息'), message, 'text');
       if (!res) {
-        const error = new Error('Commit aborted');
+        const error = new Error(_t('Commit aborted', '提交已取消'));
         error.code = 0;
         error.toString = () => error.message;
         throw error;

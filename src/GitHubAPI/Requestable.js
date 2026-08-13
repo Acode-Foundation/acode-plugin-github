@@ -50,16 +50,26 @@ class Requestable {
    * @param {string} [AcceptHeader=v3] - the accept header for the requests
    */
   constructor(auth, apiBase, AcceptHeader) {
+    // [Copilot review] auth is optional per JSDoc — default to {} to prevent
+    // TypeError when accessing auth.token / auth.username / auth.password
+    auth = auth || {};
+    const normalizedToken = auth.token
+      ? String(auth.token)
+        .trim()
+        .replace(/^Bearer\s+/i, '')
+        .replace(/^token\s+/i, '')
+      : auth.token;
+
     this.__apiBase = apiBase || 'https://api.github.com';
     this.__auth = {
-      token: auth.token,
+      token: normalizedToken,
       username: auth.username,
       password: auth.password,
     };
     this.__AcceptHeader = AcceptHeader || 'v3';
 
-    if (auth.token) {
-      this.__authorizationHeader = 'token ' + auth.token;
+    if (normalizedToken) {
+      this.__authorizationHeader = 'token ' + normalizedToken;
     } else if (auth.username && auth.password) {
       this.__authorizationHeader =
         'Basic ' + Base64.encode(auth.username + ':' + auth.password);
@@ -327,11 +337,22 @@ function callbackErrorOrThrow(cb, path) {
   return function handler(object) {
     let error;
     if (object.hasOwnProperty('config')) {
-      const {
-        response: { status, statusText },
-        config: { method, url },
-      } = object;
+      const response = object.response || {};
+      const config = object.config || {};
+      const status = response.status;
+      const statusText = response.statusText || '';
+      const method = config.method || 'UNKNOWN';
+      const url = config.url || 'UNKNOWN_URL';
+      const ghMessage = response.data && response.data.message ? response.data.message : '';
+      const docsUrl = response.data && response.data.documentation_url
+        ? ` (${response.data.documentation_url})`
+        : '';
+
       let message = `${status} error making request ${method} ${url}: "${statusText}"`;
+      if (ghMessage) {
+        message += ` | GitHub: ${ghMessage}${docsUrl}`;
+      }
+
       error = new ResponseError(message, path, object);
       log(`${message} ${JSON.stringify(object.data)}`);
     } else {

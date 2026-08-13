@@ -1,6 +1,7 @@
 import GitHub from './GitHubAPI/GitHub';
 import plugin from '../plugin.json';
 import githubFs from './githubFs';
+import createSidebar from './sidebar';
 
 const prompt = acode.require('prompt');
 const confirm = acode.require('confirm');
@@ -12,6 +13,19 @@ const EditorFile = acode.require('EditorFile');
 const appSettings = acode.require('settings');
 const toast = acode.require('toast');
 const fsOperation = acode.require('fsOperation');
+
+function isChineseLocale() {
+  const langs = [];
+  try {
+    if (Array.isArray(navigator.languages)) langs.push(...navigator.languages);
+    if (navigator.language) langs.push(navigator.language);
+  } catch (_) {}
+  return langs.some((lang) => /^zh(?:-|$)/i.test(String(lang || '')));
+}
+
+function t(en, zh) {
+  return isChineseLocale() ? zh : en;
+}
 
 if (!Blob.prototype.arrayBuffer) {
   Blob.prototype.arrayBuffer = function () {
@@ -30,6 +44,8 @@ class AcodePlugin {
   #fsInitialized = false;
   #repos = [];
   #gists = [];
+  #sidebar = null;
+  #tokenPromise = null;
 
   async init() {
     this.commands.forEach(command => {
@@ -39,10 +55,21 @@ class AcodePlugin {
     this.token = localStorage.getItem('github-token');
     await this.initFs();
 
+    // Register sidebar
+    try {
+      this.#sidebar = createSidebar(this);
+      this.#sidebar?.register();
+    } catch (e) {
+      console.warn('GitHub sidebar registration failed:', e);
+    }
+
     tutorial(plugin.id, (hide) => {
       const commands = editorManager.editor.commands.byName;
       const openCommandPalette = commands.openCommandPalette || commands.openCommandPallete;
-      const message = "Github plugin is installed successfully, open command palette and search 'open repository' to open a github repository.";
+      const message = t(
+        "GitHub plugin is installed successfully. You can use the sidebar panel or open command palette and search 'open repository' to open a GitHub repository.",
+        'GitHub 插件安装成功。您可以使用侧边栏面板，或打开命令面板搜索「open repository」来打开 GitHub 仓库。'
+      );
       let key = 'Ctrl+Shift+P';
       if (openCommandPalette) {
         key = openCommandPalette.bindKey.win;
@@ -55,10 +82,19 @@ class AcodePlugin {
           new EditorFile(fileInfo.name, { uri: KEYBINDING_FILE, render: true });
           hide();
         };
-        return <p>{message} Shortcut to open command pallete is not set, <span className='link' onclick={onclick}>Click here</span> set shortcut or use '...' icon in quick tools.</p>
+        return <p>{message} {t(
+          "Shortcut to open command palette is not set,",
+          '打开命令面板的快捷键尚未设置，'
+        )} <span className='link' onclick={onclick}>{t('Click here', '点击这里')}</span> {t(
+          "set shortcut or use '...' icon in quick tools.",
+          "设置快捷键，或使用快捷工具栏中的 '...' 图标。"
+        )}</p>
       }
 
-      return <p>{message} To open command palette use combination {key} or use '...' icon in quick tools.</p>;
+      return <p>{message} {t(
+        `To open command palette use combination ${key} or use '...' icon in quick tools.`,
+        `打开命令面板使用组合键 ${key}，或使用快捷工具栏中的 '...' 图标。`
+      )}</p>;
     });
   }
 
@@ -71,34 +107,62 @@ class AcodePlugin {
 
   async getToken() {
     if (this.token) return this.token;
-    await this.updateToken();
+    // Guard against concurrent calls triggering multiple prompts
+    if (!this.#tokenPromise) {
+      this.#tokenPromise = this.updateToken().finally(() => {
+        this.#tokenPromise = null;
+      });
+    }
+    await this.#tokenPromise;
     return this.token;
   }
 
   async destroy() {
+    this.#sidebar?.unregister();
+    this.#sidebar = null;
     githubFs.remove();
     this.commands.forEach(command => {
       editorManager.editor.commands.removeCommand(command.name);
     });
   }
 
+  clearCache() {
+    this.#repos = [];
+    this.#gists = [];
+  }
+
   async openRepo() {
     await this.initFs();
     this.token = await this.getToken();
+
+    const repos = await this.listRepositories();
+    if (!repos.length) {
+      toast(t('No repositories found', '未找到仓库'));
+      return;
+    }
+
     palette(
-      this.listRepositories.bind(this),
+      () => repos,
       this.selectBranch.bind(this),
-      'Type to search repository',
+      t('Type to search repository', '输入以搜索仓库'),
     );
   }
 
   async selectBranch(repo) {
     const [user, repoName] = repo.split('/');
+
+    toast(t('Loading branches...', '正在查找分支...'));
+    const branches = await this.listBranches(user, repoName);
+    if (!branches || !branches.length) {
+      toast(t('No branches found', '未找到分支'));
+      return;
+    }
+
     palette(
-      this.listBranches.bind(this, user, repoName),
+      () => branches,
       (branch) => this.openRepoAsFolder(user, repoName, branch)
         .catch(helpers.error),
-      'Type to search branch',
+      t('Type to search branch', '输入以搜索分支'),
     );
   }
 
@@ -108,17 +172,17 @@ class AcodePlugin {
       palette(
         this.listGists.bind(this, false),
         resolve,
-        'Type to search gist',
+        t('Type to search gist', '输入以搜索 Gist'),
       );
     });
-    const confirmation = await confirm(strings['warning'], 'Delete this gist?');
+    const confirmation = await confirm(strings['warning'], t('Delete this gist?', '删除此 Gist？'));
     if (!confirmation) return;
 
     const gh = await this.#GitHub();
     const gistApi = gh.getGist(gist);
     await gistApi.delete();
     this.#gists = this.#gists.filter(g => g.id !== gist);
-    window.toast('Gist deleted');
+    window.toast(t('Gist deleted', 'Gist 已删除'));
   }
 
   async deleteGistFile() {
@@ -127,7 +191,7 @@ class AcodePlugin {
       palette(
         this.listGists.bind(this, false),
         resolve,
-        'Type to search gist',
+        t('Type to search gist', '输入以搜索 Gist'),
       );
     });
 
@@ -135,11 +199,11 @@ class AcodePlugin {
       palette(
         this.listGistFiles.bind(this, gist, false),
         resolve,
-        'Type to search file',
+        t('Type to search gist file', '输入以搜索 Gist 文件'),
       );
     });
 
-    const confirmation = await confirm(strings['warning'], 'Delete this file?');
+    const confirmation = await confirm(strings['warning'], t('Delete this file?', '删除此文件？'));
     if (!confirmation) return;
 
     const gh = await this.#GitHub();
@@ -151,7 +215,7 @@ class AcodePlugin {
     });
     const cachedGist = this.#getGist(gist);
     if (cachedGist) cachedGist.files = cachedGist.files.filter(f => f.filename !== file);
-    window.toast('File deleted');
+    window.toast(t('File deleted', '文件已删除'));
   }
 
   async openRepoAsFolder(user, repoName, branch) {
@@ -188,8 +252,13 @@ class AcodePlugin {
     const url = githubFs.constructUrl('repo', user, repoName, '/', branch);
     openFolder(url, {
       name: `${user}/${repoName}/${branch}`,
+      listFiles: false,
       saveState: false,
     });
+    toast(t(
+      `Repo opened: ${user}/${repoName}/${branch}. Check the file browser sidebar to browse files.`,
+      `仓库已打开：${user}/${repoName}/${branch}。请在文件浏览器侧边栏中查看文件。`
+    ));
   }
 
   async openGist() {
@@ -199,7 +268,7 @@ class AcodePlugin {
     palette(
       this.listGists.bind(this),
       this.openGistFile.bind(this),
-      'Type to search gist',
+      t('Type to search gist', '输入以搜索 Gist'),
     );
   }
 
@@ -208,32 +277,32 @@ class AcodePlugin {
     let thisFilename;
     if (gist === this.NEW) {
       const { description, name, public: isPublic } = await multiPrompt(
-        'New gist',
+        t('New gist', '新建 Gist'),
         [{
           id: 'description',
-          placeholder: 'Description',
+          placeholder: t('Description', '描述'),
           type: 'text',
         },
         {
           id: 'name',
-          placeholder: 'File name*',
+          placeholder: t('File name*', '文件名*'),
           type: 'text',
           required: true,
         },
         [
-          'Visibility',
+          t('Visibility', '可见性'),
           {
             id: 'public',
             name: 'visibility',
             value: true,
-            placeholder: 'Public',
+            placeholder: t('Public', '公开'),
             type: 'radio',
           },
           {
             id: 'private',
             name: 'visibility',
             value: false,
-            placeholder: 'Private',
+            placeholder: t('Private', '私有'),
             type: 'radio',
           }
         ]],
@@ -263,9 +332,9 @@ class AcodePlugin {
           this.listGistFiles.bind(this, gist),
           async (file) => {
             if (file === this.NEW) {
-              const filename = await prompt('Enter file name', '', 'text', {
+              const filename = await prompt(t('Enter file name', '输入文件名'), '', 'text', {
                 required: true,
-                placeholder: 'filename',
+                placeholder: t('filename', '文件名'),
               });
               if (!filename) {
                 window.toast(strings['cancelled']);
@@ -295,7 +364,7 @@ class AcodePlugin {
             thisFilename = file;
             resolve();
           },
-          'Type to search gist file',
+          t('Type to search gist file', '输入以搜索 Gist 文件'),
         );
       });
     }
@@ -308,16 +377,55 @@ class AcodePlugin {
   }
 
   async updateToken() {
-    const result = await prompt('Enter github token', '', 'text', {
+    const result = await prompt(
+      t(
+        'Enter GitHub token (minimum: classic `repo` + `gist`, or fine-grained Metadata:Read, Contents:Read/Write, Gists:Read/Write)',
+        '输入 GitHub 令牌（最低权限：Classic 需 repo + gist；Fine-grained 需 Metadata:Read、Contents:Read/Write、Gists:Read/Write）'
+      ),
+      '',
+      'text',
+      {
       required: true,
-      placeholder: 'token',
-    });
+      placeholder: t('token', '令牌'),
+      }
+    );
 
     if (result) {
-      this.token = result;
+      const normalizedToken = String(result)
+        .trim()
+        .replace(/^Bearer\s+/i, '')
+        .replace(/^token\s+/i, '');
+
+      if (!/^[A-Za-z0-9_]+$/.test(normalizedToken)) {
+        toast(t(
+          'Invalid token format: only letters, numbers, underscore are allowed',
+          '令牌格式无效：仅允许字母、数字、下划线'
+        ));
+        return;
+      }
+
+      // [Copilot+Greptile review] Persist to localStorage only after
+      // validation succeeds; rollback this.token on failure so an invalid
+      // token never stays cached across app restarts.
+      const oldToken = this.token;
+      this.token = normalizedToken;
       this.#fsInitialized = false;
-      localStorage.setItem('github-token', result);
       await this.initFs();
+
+      try {
+        const gh = await this.#GitHub();
+        await gh.getUser().getProfile();
+        // Validation passed — now persist
+        localStorage.setItem('github-token', this.token);
+      } catch (error) {
+        // Rollback to previous token
+        this.token = oldToken;
+        this.#fsInitialized = false;
+        await this.initFs();
+        const msg = error && (error.message || String(error)) || t('Unknown token error', '未知令牌错误');
+        toast(t('Token validation failed: ', '令牌校验失败：') + msg);
+        throw error;
+      }
     }
   }
 
@@ -368,7 +476,7 @@ class AcodePlugin {
     }
 
     list.push({
-      text: 'New branch',
+      text: t('New branch', '新建分支'),
       value: this.NEW,
     });
 
@@ -397,7 +505,7 @@ class AcodePlugin {
 
     if (showAddNew) {
       list.push({
-        text: this.#highlightedText('New gist'),
+        text: this.#highlightedText(t('New gist', '新建 Gist')),
         value: this.NEW,
       });
     }
@@ -429,7 +537,7 @@ class AcodePlugin {
 
     if (showAddNew) {
       list.push({
-        text: this.#highlightedText('New file'),
+        text: this.#highlightedText(t('New file', '新建文件')),
         value: this.NEW,
       });
     }
@@ -468,36 +576,33 @@ class AcodePlugin {
     return [
       {
         name: 'github:repository:selectrepo',
-        description: 'Open repository',
+        description: t('Open repository', '\u6253\u5f00\u4ed3\u5e93'),
         exec: this.openRepo.bind(this),
       },
       {
         name: 'github:gist:opengist',
-        description: 'Open gist',
+        description: t('Open gist', '\u6253\u5f00 Gist'),
         exec: this.openGist.bind(this),
       },
       {
         name: 'github:gist:deletegist',
-        description: 'Delete gist',
+        description: t('Delete gist', '\u5220\u9664 Gist'),
         exec: this.deleteGist.bind(this),
       },
       {
         name: 'github:gist:deletegistfile',
-        description: 'Delete gist file',
+        description: t('Delete gist file', '\u5220\u9664 Gist \u6587\u4ef6'),
         exec: this.deleteGistFile.bind(this),
       },
       {
         name: 'github:updatetoken',
-        description: 'Update github token',
+        description: t('Update github token', '\u66f4\u65b0 GitHub \u4ee4\u724c'),
         exec: this.updateToken.bind(this),
       },
       {
         name: 'github:clearcache',
-        description: 'Clear github cache',
-        exec: () => {
-          this.#repos = [];
-          this.#gists = [];
-        }
+        description: t('Clear github cache', '\u6e05\u9664 GitHub \u7f13\u5b58'),
+        exec: this.clearCache.bind(this),
       }
     ]
   }
@@ -517,7 +622,7 @@ class AcodePlugin {
     const list = [
       {
         key: 'askCommitMessage',
-        text: 'Ask for commit message',
+        text: t('Ask for commit message', '提交时询问提交信息'),
         checkbox: this.settings.askCommitMessage,
       }
     ];
@@ -551,8 +656,10 @@ function tutorial(id, message) {
 }
 
 if (window.acode) {
+  // plugin setup
   const acodePlugin = new AcodePlugin();
   acode.setPluginInit(plugin.id, async (baseUrl, $page, { cacheFileUrl, cacheFile }) => {
+    // pluginInit
     if (!baseUrl.endsWith('/')) {
       baseUrl += '/';
     }
