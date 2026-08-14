@@ -22,19 +22,21 @@ type PromptOptions = {
   match: RegExp;
   required: boolean;
   placeholder: string;
-  test(value: any): boolean;
+  test(value: unknown): boolean;
 };
 
 type SelectOptions = {
   onCancel(): void;
   hideOnSelect: boolean;
   textTransform: boolean;
-  default: any;
+  default: unknown;
 };
 interface Acode {
   readonly exitAppMessage: string;
   readonly formatters: Array<Formatter>;
-  exec(command: string, value?: any): boolean;
+  require(module: 'sidebarApps'): SidebarApps | undefined;
+  require<T = unknown>(module: string): T;
+  exec(command: string, value?: unknown): boolean;
   setLoadingMessage(message: string): void;
   initPlugin(pluginId: string, baseUrl: string, $page: HTMLElement): void;
   unmountPlugin(pluginId: string): void;
@@ -77,6 +79,24 @@ interface Acode {
   webServer: Server;
   $quickToolToggler: HTMLElement;
   $headerToggler: HTMLElement;
+}
+
+interface AcodeBuildInfo {
+  version: string;
+  versionCode: number;
+}
+
+interface SidebarApps {
+  add(
+    icon: string,
+    id: string,
+    title: string,
+    init: (container: HTMLElement) => undefined | (() => void),
+    prepend?: boolean,
+    onSelected?: (container: HTMLElement) => void,
+  ): void;
+  get(id: string): HTMLElement;
+  remove(id: string): void;
 }
 
 interface fileBrowserSettings {
@@ -318,7 +338,7 @@ interface GistFiles {
   [filename: string]: GistFile;
 }
 
-interface Repository {}
+type Repository = object;
 
 interface Repo {
   readonly sha: string;
@@ -352,7 +372,7 @@ interface GitRecord {
 
 interface GistRecord {
   get(id: string): Gist;
-  add(gist: any, isNew?: boolean): void;
+  add(gist: unknown, isNew?: boolean): void;
   remove(gist: Gist): Gist;
   update(gist: Gist): void;
   reset(): void;
@@ -426,6 +446,7 @@ declare var strings: Map<string, string>;
  * Handles back button click
  */
 declare var acode: Acode;
+declare var BuildInfo: AcodeBuildInfo;
 
 declare var ASSETS_DIRECTORY: string;
 declare var CACHE_STORAGE: string;

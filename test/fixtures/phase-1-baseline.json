@@ -1,0 +1,28 @@
+{
+  "referenceBundleBytes": 258048,
+  "measuredBundleBytesBeforePhase1": 281644,
+  "commands": [
+    ["github:open", "GitHub"],
+    ["github:repository:selectrepo", "Open repository"],
+    ["github:gist:opengist", "Open gist"],
+    ["github:gist:deletegist", "Delete gist"],
+    ["github:gist:deletegistfile", "Delete gist file"],
+    ["github:updatetoken", "GitHub account"],
+    ["github:clearcache", "Clear github cache"]
+  ],
+  "urls": {
+    "repository": "gh://repo/octocat/example@main/src/index.js",
+    "gist": "gh://gist/abc123/notes.md"
+  },
+  "archiveEntries": ["icon.png", "main.js", "plugin.json", "readme.md"],
+  "api": {
+    "authorizationScheme": "token",
+    "accept": "application/vnd.github.v3+json",
+    "getCacheBuster": "_datetime"
+  },
+  "knownBehavior": {
+    "deleteCommitMessage": "Delete the file at 'src/index.js'",
+    "gistWriteRequiresNestedSettingsValue": true,
+    "repositoryMutationsSerialized": false
+  }
+}

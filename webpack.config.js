@@ -1,31 +1,85 @@
-const { exec } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
+const webpack = require('webpack');
+const TerserPlugin = require('terser-webpack-plugin');
+const {
+  getGitHubAuthBuildConfig,
+  loadBuildEnvironment,
+} = require('./scripts/dev/github-auth-config');
+const { packZip } = require('./scripts/dev/pack-zip');
+const { terserOptions } = require('./scripts/dev/terser-options');
 
-module.exports = (env, options) => {
+const BROWSER_TARGETS = 'cover 100%, not android < 5';
+const CONTENT_TYPE_MODULE = require.resolve('content-type');
+const ES5_REGEXP_MODULES = [
+  require.resolve('@octokit/endpoint'),
+  require.resolve('@octokit/request-error'),
+];
+
+module.exports = (_env, options) => {
   const { mode = 'development' } = options;
+  const githubAuth = getGitHubAuthBuildConfig(loadBuildEnvironment(mode));
 
   if (mode === 'production') {
-    fs.rmdirSync(path.resolve(__dirname, 'dist'), { recursive: true });
+    fs.rmSync(path.resolve(__dirname, 'dist'), {
+      recursive: true,
+      force: true,
+    });
   }
 
   const rules = [
     {
+      enforce: 'pre',
+      include: ES5_REGEXP_MODULES,
+      loader: path.resolve(__dirname, 'scripts/dev/es5-regexp-loader.js'),
+    },
+    {
+      enforce: 'pre',
+      include: CONTENT_TYPE_MODULE,
+      loader: path.resolve(
+        __dirname,
+        'scripts/dev/preserve-constructors-loader.js',
+      ),
+    },
+    {
       test: /\.m?js$/,
-      use: [
-        'html-tag-js/jsx/tag-loader.js',
-        {
-          loader: 'babel-loader',
-          options: {
-            presets: ['@babel/preset-env'],
-          },
+      include: CONTENT_TYPE_MODULE,
+      use: {
+        loader: 'babel-loader',
+        options: {
+          babelrc: false,
+          configFile: false,
+          presets: [
+            [
+              '@babel/preset-env',
+              { modules: 'commonjs', targets: BROWSER_TARGETS },
+            ],
+          ],
         },
-      ],
+      },
+    },
+    {
+      test: /\.m?js$/,
+      exclude: (resource) =>
+        resource === CONTENT_TYPE_MODULE ||
+        /node_modules[\\/]core-js/.test(resource),
+      use: {
+        loader: 'babel-loader',
+        options: {
+          babelrc: false,
+          configFile: path.resolve(__dirname, '.babelrc'),
+        },
+      },
+    },
+    {
+      test: /\.css$/,
+      use: path.resolve(__dirname, 'scripts/dev/css-source-loader.js'),
     },
   ];
 
   const main = {
     mode,
+    target: ['web', 'es5'],
     entry: {
       main: './src/main.js',
     },
@@ -34,31 +88,50 @@ module.exports = (env, options) => {
       filename: '[name].js',
       chunkFilename: '[name].js',
     },
+    optimization: {
+      // Webpack 5.109 can omit its require runtime when a concatenated entry
+      // contains a wrapped CommonJS module such as content-type.
+      concatenateModules: false,
+      minimizer: [
+        new TerserPlugin({
+          extractComments: false,
+          terserOptions,
+        }),
+      ],
+    },
     module: {
       rules,
     },
     resolve: {
+      alias: {
+        'json-with-bigint$': path.resolve(
+          __dirname,
+          'src/jsonCompatibility.js',
+        ),
+      },
       fallback: {
-        path: require.resolve('path-browserify'),
+        path: path.resolve(__dirname, 'src/pathBrowser.js'),
       },
     },
     plugins: [
+      new webpack.DefinePlugin({
+        'process.env.ACODE_GITHUB_CLIENT_ID': JSON.stringify(
+          githubAuth.clientId,
+        ),
+        'process.env.ACODE_GITHUB_INSTALL_URL': JSON.stringify(
+          githubAuth.installUrl,
+        ),
+      }),
       {
         apply: (compiler) => {
-          compiler.hooks.afterDone.tap('pack-zip', () => {
-            // run pack-zip.js
-            exec('node .vscode/pack-zip.js', (err, stdout, stderr) => {
-              if (err) {
-                console.error(err);
-                return;
-              }
-              console.log(stdout);
-            });
+          compiler.hooks.afterEmit.tapPromise('pack-zip', async () => {
+            const outputFile = await packZip();
+            console.log(`${path.basename(outputFile)} written.`);
           });
-        }
-      }
+        },
+      },
     ],
   };
 
   return [main];
-}
+};

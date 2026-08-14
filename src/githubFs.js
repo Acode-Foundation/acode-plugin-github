@@ -1,7 +1,5 @@
-import GitHub from './GitHubAPI/GitHub';
-import { lookup } from 'mime-types';
-import Repository from './GitHubAPI/Repository';
-import Gist from './GitHubAPI/Gist';
+import { createGitHubService } from './githubService';
+import { lookupMimeType } from './mime';
 
 const Url = acode.require('url');
 const fsOperation = acode.require('fs') || acode.require('fsOperation');
@@ -15,398 +13,367 @@ githubFs.remove = () => {
   fsOperation.remove(test);
 };
 
-/**
- * 
- * @param {string} user 
- * @param {'repo' | 'gist'} type 
- * @param {string} repo 
- * @param {string} path 
- * @param {string} branch 
- * @returns 
- */
 githubFs.constructUrl = (type, user, repo, path, branch) => {
   if (type === 'gist') {
-    // user is gist id
-    // repo is filename
     return `gh://gist/${user}/${repo}`;
   }
   let url = `gh://${type}/${user}/${repo}`;
-  if (branch) {
-    url += `@${branch}`;
-  }
-  if (path) {
-    url = Url.join(url, path);
-  }
+  if (branch) url += `@${encodeURIComponent(branch)}`;
+  if (path) url = Url.join(url, path);
   return url;
 };
 
-export default function githubFs(token, settings) {
+export default function githubFs(
+  token,
+  settings,
+  { createGitHub = createGitHubService, runGitHub } = {},
+) {
+  let github;
+  let githubToken;
+
   fsOperation.extend(test, (url) => {
-    const { user, type, repo, path, gist } = parseUrl(url);
-    if (type === 'repo') {
-      return readRepo(user, repo, path);
-    }
-
-    if (type === 'gist') {
-      return readGist(gist, path);
-    }
-
+    const { gist, path, repo, type, user } = parseUrl(url);
+    if (type === 'repo') return readRepo(user, repo, path);
+    if (type === 'gist') return readGist(gist, path);
     throw new Error('Invalid github url');
   });
 
-  /**
-   * Parse url to get type, user, repo and path
-   * @param {string} url 
-   */
+  async function getGitHub() {
+    const currentToken = await token();
+    if (!github || githubToken !== currentToken) {
+      github = createGitHub(currentToken);
+      githubToken = currentToken;
+    }
+    return github;
+  }
+
+  async function withGitHub(operation, { write = false } = {}) {
+    if (runGitHub) return runGitHub(operation, { write });
+    return operation(await getGitHub());
+  }
+
   function parseUrl(url) {
-    url = url.replace(/^gh:\/\//, '');
-    const [type, user, repo, ...path] = url.split('/');
-
-    // gist doesn't have user
+    const [type, user, repo, ...path] = url.replace(/^gh:\/\//, '').split('/');
     if (type === 'gist') {
-      return {
-        /**@type {string} */
-        gist: user,
-        /**@type {string} */
-        path: repo,
-        type: 'gist',
-      }
+      return { gist: user, path: repo, type };
     }
-
-    return {
-      /**@type {string} */
-      user,
-      /**@type {'repo'|'gist'} */
-      type,
-      /**@type {string} */
-      repo,
-      /**@type {string} */
-      path: path.join('/'),
-    };
+    return { path: path.join('/'), repo, type, user };
   }
 
-  /**
-   * Get commit message from user
-   * @param {string} message 
-   * @returns 
-   */
   async function getCommitMessage(message) {
-    if (settings.askCommitMessage) {
-      const res = await prompt('Commit message', message, 'text');
-      if (!res) {
-        const error = new Error('Commit aborted');
-        error.code = 0;
-        error.toString = () => error.message;
-        throw error;
-      }
-      return res;
-    }
-    return message;
+    if (!settings.askCommitMessage) return message;
+    const result = await prompt('Commit message', message, 'text');
+    if (result) return result;
+
+    const error = new Error('Commit aborted');
+    error.code = 0;
+    error.toString = () => error.message;
+    throw error;
   }
 
-  /**
-   * 
-   * @param {string} user 
-   * @param {string} repoAtBranch 
-   * @param {string} path 
-   * @returns 
-   */
-  function readRepo(user, repoAtBranch, path) {
-    /**@type {GitHub} */
-    let gh;
-    /**@type {Repository} */
-    let repo;
-    const [repoName, branch] = repoAtBranch.split('@');
-    let sha = '';
-    const getSha = async () => {
-      if (!sha && path) {
-        const res = await repo.getSha(branch, path);
-        sha = res.data.sha;
+  function readRepo(owner, repoAtBranch, path) {
+    const separator = repoAtBranch.indexOf('@');
+    const repo =
+      separator === -1 ? repoAtBranch : repoAtBranch.slice(0, separator);
+    let branch;
+    if (separator !== -1) {
+      try {
+        branch = decodeURIComponent(repoAtBranch.slice(separator + 1));
+      } catch (_error) {
+        throw new Error('Invalid GitHub URL: malformed repository ref');
       }
-    };
+    }
+    if (!repo || (separator !== -1 && !branch)) {
+      throw new Error('Invalid GitHub URL: missing repository or ref');
+    }
+    let metadata;
 
-    const init = async () => {
-      if (gh) return;
-      gh = new GitHub({ token: await token() });
-      repo = gh.getRepo(user, repoName);
+    async function getMetadata() {
+      if (!metadata && path) {
+        metadata = await withGitHub((client) =>
+          client.getContent(owner, repo, path, branch),
+        );
+      }
+      return metadata;
+    }
+
+    function invalidateMetadata() {
+      metadata = undefined;
     }
 
     return {
       async lsDir() {
-        await init();
-        const res = await repo.getSha(branch, path);
-        const { data } = res;
-
-        return data.map(({ name: filename, path, type }) => {
-          return {
-            name: filename,
-            isDirectory: type === 'dir',
-            isFile: type === 'file',
-            url: githubFs.constructUrl('repo', user, repoName, path, branch),
-          }
-        });
+        const data = await withGitHub((client) =>
+          client.getContent(owner, repo, path, branch),
+        );
+        if (!Array.isArray(data)) throw new Error('Not a directory');
+        return data.map(({ name, path: childPath, type }) => ({
+          isDirectory: type === 'dir',
+          isFile: type === 'file',
+          name,
+          url: githubFs.constructUrl('repo', owner, repo, childPath, branch),
+        }));
       },
+
       async readFile(encoding) {
-        if (!path) throw new Error('Cannot read root directory')
-        await init();
-        await getSha();
-        let { data } = await repo.getBlob(sha, 'blob');
-        data = await data.arrayBuffer();
-
-        if (encoding) {
-          if (encodings?.decode) {
-            const decoded = await encodings.decode(data, encoding);
-            if (decoded) return decoded;
-          }
-
-          /**@deprecated just for backward compatibility */
-          return helpers.decodeText(data, encoding);
+        if (!path) throw new Error('Cannot read root directory');
+        const content = await getMetadata();
+        if (Array.isArray(content) || content.type === 'dir') {
+          throw new Error('Cannot read a directory');
         }
-
-        return data;
+        const { sha } = content;
+        const data = await withGitHub((client) =>
+          client.getBlob(owner, repo, sha),
+        );
+        if (!encoding) return data;
+        if (encodings?.decode) {
+          const decoded = await encodings.decode(data, encoding);
+          if (decoded) return decoded;
+        }
+        return helpers.decodeText(data, encoding);
       },
+
       async writeFile(data, encoding) {
-        if (!path) throw new Error('Cannot write to root directory')
-        const commitMessage = await getCommitMessage(`update ${path}`);
-        if (!commitMessage) return;
-
-        let encode = true;
-
-        if (encoding) {
-          if (data instanceof ArrayBuffer && encodings?.decode) {
-            data = await encodings.decode(data, encoding);
-          }
-
-          if (encoding && encodings?.encode) {
-            data = await encodings.encode(data, encoding);
-          }
-
-          if (data instanceof ArrayBuffer && encodings?.decode) {
-            data = await encodings.decode(data, encoding);
-          }
-        } else if (data instanceof ArrayBuffer) {
-          // convert to base64
-          data = await bufferToBase64(data);
-          encode = false;
-        }
-
-        await init();
-        await repo.writeFile(branch, path, data, commitMessage, { encode });
+        if (!path) throw new Error('Cannot write to root directory');
+        const message = await getCommitMessage(`update ${path}`);
+        const transformed = await prepareContent(data, encoding);
+        await withGitHub(
+          (client) =>
+            client.writeFile({
+              branch,
+              content: transformed.content,
+              encode: transformed.encode,
+              message,
+              owner,
+              path,
+              repo,
+            }),
+          { write: true },
+        );
+        invalidateMetadata();
       },
+
       async createFile(name, data = '') {
-        await init();
-        const newPath = path === '' ? name : Url.join(path, name);
-        // check if file exists
-        let sha;
-        let encode = true;
+        const newPath = path ? Url.join(path, name) : name;
+        const transformed = await prepareContent(data);
+        const message = await getCommitMessage(`create ${newPath}`);
         try {
-          sha = await repo.getSha(branch, newPath);
-        } catch (e) {
-          // file doesn't exist
+          await withGitHub(
+            (client) =>
+              client.createFile({
+                branch,
+                content: transformed.content,
+                encode: transformed.encode,
+                message,
+                owner,
+                path: newPath,
+                repo,
+              }),
+            { write: true },
+          );
+        } catch (error) {
+          if (error.kind === 'conflict') throw new Error('File already exists');
+          throw error;
         }
-
-        if (sha) {
-          throw new Error('File already exists');
-        }
-
-        if (data instanceof ArrayBuffer) {
-          // convert to base64
-          data = await bufferToBase64(data);
-          encode = false;
-        }
-
-        const commitMessage = await getCommitMessage(`create ${newPath}`);
-        if (!commitMessage) return;
-        await repo.writeFile(branch, newPath, data, commitMessage, { encode });
-        return githubFs.constructUrl('repo', user, repoName, newPath, branch);
+        return githubFs.constructUrl('repo', owner, repo, newPath, branch);
       },
+
       async createDirectory(dirname) {
-        await init();
-        let newPath = path === '' ? dirname : Url.join(path, dirname);
-        // check if file exists
-        let sha;
+        const newPath = path ? Url.join(path, dirname) : dirname;
+        const message = await getCommitMessage(`create ${newPath}`);
         try {
-          sha = await repo.getSha(branch, newPath);
-        } catch (e) {
-          // file doesn't exist
-        }
-
-        if (sha) {
-          throw new Error('Directory already exists');
-        }
-
-        const createPath = Url.join(newPath, '.gitkeep');
-        const commitMessage = await getCommitMessage(`create ${newPath}`);
-        if (!commitMessage) return;
-        await repo.writeFile(branch, createPath, '', commitMessage);
-        return githubFs.constructUrl('repo', user, repoName, newPath, branch);
-      },
-      async copyTo(dest) {
-        throw new Error('Not supported');
-      },
-      async delete() {
-        if (!path) throw new Error('Cannot delete root');
-        await init();
-        await getSha();
-        const commitMessage = await getCommitMessage(`delete ${path}`);
-        if (!commitMessage) return;
-        await repo.deleteFile(branch, path, commitMessage, sha);
-      },
-      async moveTo(dest) {
-        throw new Error('Not supported');
-        // if (!path) throw new Error('Cannot move root');
-        // await init();
-        // const { path: destPath } = parseUrl(dest);
-        // const newName = Url.join(destPath, Url.basename(path));
-        // const res = await move(newName);
-        // return res;
-      },
-      async renameTo(name) {
-        throw new Error('Not supported');
-        // if (!path) throw new Error('Cannot rename root');
-        // await init();
-        // const newName = Url.join(Url.dirname(path), name);
-        // const res = await move(newName);
-        // return res;
-      },
-      async exists() {
-        if (!path) return true;
-        await init();
-        try {
-          await repo.getSha(branch, path);
-          return true;
-        } catch (e) {
-          return false;
-        }
-      },
-      async stat() {
-        if (!path) {
-          return {
-            length: 0,
-            name: `github/${user}/${repoName}`,
-            isDirectory: true,
-            isFile: false,
+          await withGitHub(
+            (client) =>
+              client.createFile({
+                branch,
+                content: '',
+                message,
+                owner,
+                path: Url.join(newPath, '.gitkeep'),
+                repo,
+              }),
+            { write: true },
+          );
+        } catch (error) {
+          if (error.kind === 'conflict') {
+            throw new Error('Directory already exists');
           }
+          throw error;
         }
-        await init();
-        await getSha();
-        const content = await repo.getBlob(sha);
-        return {
-          length: content.data.length,
-          name: path.split('/').pop(),
-          isDirectory: path.endsWith('/'),
-          isFile: !path.endsWith('/'),
-          type: lookup(path),
-        };
+        return githubFs.constructUrl('repo', owner, repo, newPath, branch);
       },
-    }
-  }
 
-  function readGist(gistId, path) {
-    /**@type {string} */
-    let file;
-    /**@type {GitHub} */
-    let gh;
-    /**@type {Gist} */
-    let gist;
-    const getFile = async () => {
-      if (!file) {
-        const { data } = await gist.read();
-        file = data.files[path];
-      }
-      return file;
-    }
-    const init = async () => {
-      if (gh) return;
-      gh = new GitHub({ token: await token() });
-      gist = gh.getGist(gistId);
-    }
-
-    return {
-      async lsDir() {
-        throw new Error('Not supported');
-      },
-      async readFile() {
-        await init();
-        const { content: data } = await getFile();
-        return data;
-      },
-      async writeFile(data, encoding) {
-        await init();
-
-        encoding = settings.value.defaultFileEncoding || 'utf-8';
-
-        if (encoding) {
-          if (data instanceof ArrayBuffer && encodings?.decode) {
-            data = await encodings.decode(data, encoding);
-          }
-
-          if (encoding && encodings?.encode) {
-            data = await encodings.encode(data, encoding);
-          }
-
-          if (data instanceof ArrayBuffer && encodings?.decode) {
-            data = await encodings.decode(data, encoding);
-          }
-        }
-
-        await gist.update({
-          files: {
-            [path]: {
-              content: data,
-            }
-          }
-        });
-      },
-      async createFile(name, data) {
-        throw new Error('Not supported');
-      },
-      async createDirectory() {
-        throw new Error('Not supported');
-      },
       async copyTo() {
         throw new Error('Not supported');
       },
+
       async delete() {
-        throw new Error('Not supported');
+        if (!path) throw new Error('Cannot delete root');
+        const message = await getCommitMessage(`delete ${path}`);
+        await withGitHub(
+          (client) =>
+            client.deleteFile({
+              branch,
+              message,
+              owner,
+              path,
+              repo,
+            }),
+          { write: true },
+        );
+        invalidateMetadata();
       },
+
       async moveTo() {
         throw new Error('Not supported');
       },
+
       async renameTo() {
         throw new Error('Not supported');
       },
+
       async exists() {
-        await init();
-        return !!await getFile();
+        if (!path) return true;
+        try {
+          await getMetadata();
+          return true;
+        } catch (error) {
+          if (error.kind === 'not-found') return false;
+          throw error;
+        }
       },
+
       async stat() {
-        await init();
-        await getFile();
+        if (!path) {
+          return {
+            isDirectory: true,
+            isFile: false,
+            length: 0,
+            name: `github/${owner}/${repo}`,
+          };
+        }
+        const content = await getMetadata();
+        const isDirectory = Array.isArray(content) || content.type === 'dir';
+        if (isDirectory) {
+          return {
+            isDirectory: true,
+            isFile: false,
+            length: 0,
+            name: path.split('/').pop(),
+          };
+        }
         return {
-          length: file.size,
-          name: path,
           isDirectory: false,
-          isFile: true,
-          type: lookup(path),
+          isFile: content.type === 'file',
+          length: content.size ?? 0,
+          name: path.split('/').pop(),
+          type: lookupMimeType(path),
         };
       },
-    }
+    };
   }
+
+  function readGist(gistId, path) {
+    let file;
+
+    async function getFile() {
+      if (!file) {
+        const gist = await withGitHub((client) => client.getGist(gistId));
+        file = gist.files[path];
+      }
+      return file;
+    }
+
+    return {
+      async lsDir() {
+        throw new Error('Not supported');
+      },
+
+      async readFile() {
+        return (await getFile()).content;
+      },
+
+      async writeFile(data, encoding) {
+        const selectedEncoding =
+          encoding || settings.defaultFileEncoding || 'utf-8';
+        const transformed = await prepareContent(data, selectedEncoding);
+        await withGitHub(
+          (client) =>
+            client.updateGist(gistId, {
+              files: { [path]: { content: transformed.content } },
+            }),
+          { write: true },
+        );
+        file = undefined;
+      },
+
+      async createFile() {
+        throw new Error('Not supported');
+      },
+
+      async createDirectory() {
+        throw new Error('Not supported');
+      },
+
+      async copyTo() {
+        throw new Error('Not supported');
+      },
+
+      async delete() {
+        throw new Error('Not supported');
+      },
+
+      async moveTo() {
+        throw new Error('Not supported');
+      },
+
+      async renameTo() {
+        throw new Error('Not supported');
+      },
+
+      async exists() {
+        return Boolean(await getFile());
+      },
+
+      async stat() {
+        const content = await getFile();
+        return {
+          isDirectory: false,
+          isFile: true,
+          length: content.size,
+          name: path,
+          type: lookupMimeType(path),
+        };
+      },
+    };
+  }
+}
+
+async function prepareContent(data, encoding) {
+  let encode = true;
+  if (encoding) {
+    if (data instanceof ArrayBuffer && encodings?.decode) {
+      data = await encodings.decode(data, encoding);
+    }
+    if (encodings?.encode) data = await encodings.encode(data, encoding);
+    if (data instanceof ArrayBuffer && encodings?.decode) {
+      data = await encodings.decode(data, encoding);
+    }
+  } else if (data instanceof ArrayBuffer) {
+    data = await bufferToBase64(data);
+    encode = false;
+  }
+  return { content: data, encode };
 }
 
 async function bufferToBase64(buffer) {
   const blob = new Blob([buffer]);
   const reader = new FileReader();
-
   reader.readAsDataURL(blob);
   return new Promise((resolve, reject) => {
     reader.onloadend = () => {
-      // strip off the data: url prefix
-      const content = reader.result.slice(reader.result.indexOf(',') + 1);
-      resolve(content);
+      resolve(reader.result.slice(reader.result.indexOf(',') + 1));
     };
-
     reader.onerror = reject;
   });
 }

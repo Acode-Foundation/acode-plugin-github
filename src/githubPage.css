@@ -1,0 +1,497 @@
+/* Compact `g-*` selectors keep the embedded stylesheet within the bundle gate. */
+.github-page {
+  --gp: clamp(320px, 34vw, 380px);
+  --g1: var(--active-color);
+  --g2: var(--secondary-text-color);
+  --g3: var(--border-color);
+  --g4: var(--active-icon-color);
+  --g5: var(--secondary-color);
+  --g6: var(--popup-text-color);
+  color: var(--g2);
+  background: var(--g5);
+}
+
+.github-page > .main {
+  padding: 0;
+  overflow: hidden;
+}
+
+.g-hv {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.g-a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--g1);
+  background: var(--g4);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.g-a > .icon {
+  font-size: 1.1rem;
+}
+
+.g-a.primary {
+  color: var(--button-text-color);
+  background: var(--button-background-color);
+}
+
+.g-a.text {
+  background: transparent;
+}
+
+.g-a:disabled {
+  opacity: 0.55;
+}
+
+:is(.g-a, .g-o, .g-t):focus-visible,
+.g-it > [data-action="github-overflow"]:focus-visible {
+  outline: 2px solid var(--g1);
+  outline-offset: -2px;
+}
+
+.g-w {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.g-ts > .g-t {
+  border-radius: 0;
+  color: var(--g2);
+  background: none;
+}
+
+.g-ts > .g-t[aria-selected="true"] {
+  color: var(--g1);
+  font-weight: 700;
+}
+
+.g-ts > .tab-indicator {
+  width: 50%;
+  transition: transform 180ms;
+}
+
+.g-ts[data-active="gists"] > .tab-indicator {
+  transform: translateX(100%);
+}
+
+.g-l {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.g-m,
+.g-d {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden auto;
+}
+
+.g-m {
+  flex: 1;
+}
+
+.g-d {
+  display: none;
+  flex: 1;
+}
+
+.g-w:is([data-route="detail"], [data-route="account"]) .g-m,
+.g-w:not([data-route="root"]) .g-ts {
+  display: none;
+}
+
+.g-w:is([data-route="detail"], [data-route="account"]) .g-d {
+  display: block;
+}
+
+.g-sx {
+  max-width: 48rem;
+  margin: auto;
+  padding: 16px 16px 0;
+}
+
+.g-sh {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 0 8px;
+}
+
+.g-sl,
+.g-e {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.g-sl {
+  min-width: 0;
+  color: var(--g2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.g-e {
+  opacity: 0.65;
+}
+
+.g-c,
+.g-h,
+.g-i {
+  border: 1px solid var(--g3);
+  border-radius: var(--popup-border-radius, 10px);
+  color: var(--g6);
+  background: var(--popup-background-color);
+}
+
+.g-c {
+  overflow: hidden;
+}
+
+.g-w .g-ls {
+  overflow: visible;
+}
+
+.g-o {
+  display: flex;
+  min-width: 0;
+  min-height: 64px;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 10px 16px;
+  border: 0;
+  color: var(--g6);
+  background: none;
+  font: inherit;
+  text-align: left;
+}
+
+.g-o > .icon:first-child {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  color: var(--g1);
+  background: var(--g4);
+  border-radius: 8px;
+  font-size: 1.25rem;
+}
+
+.g-o > .icon.arrow_forward_ios {
+  width: 20px;
+  height: 40px;
+  flex: 0 0 20px;
+  color: var(--g2);
+  opacity: 0.65;
+  font-size: 0.8rem;
+}
+
+.g-rc {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-self: stretch;
+  justify-content: center;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.g-rh,
+.g-dt {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.g-rt,
+.g-rm,
+.g-dt h2 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.g-rt {
+  flex: 1;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.g-rm,
+.g-mu {
+  font-size: 0.76rem;
+  line-height: 1.4;
+  opacity: 0.65;
+}
+
+.g-rm {
+  margin-top: 3px;
+}
+
+.g-b {
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--g1);
+  background: var(--g4);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.g-it > [data-action="github-overflow"] {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  margin-right: 6px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--g2);
+  background: transparent;
+  font-size: 1.15rem;
+}
+
+.g-w .g-bl .g-o {
+  max-width: 100%;
+  /* biome-ignore lint/complexity/noImportantStyles: Acode forces action overflow. */
+  overflow: hidden !important;
+}
+
+.g-w .g-bl .g-rt {
+  display: -webkit-box;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.g-dc,
+.g-ac {
+  max-width: 48rem;
+  margin: auto;
+  padding-bottom: 24px;
+}
+
+.g-h,
+.g-i {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 16px;
+  padding: 16px;
+}
+
+.g-di {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border-radius: 10px;
+  color: var(--g1);
+  background: var(--g4);
+  font-size: 1.5rem;
+}
+
+.g-dp,
+.g-ap {
+  min-width: 0;
+  flex: 1;
+}
+
+.g-dt h2,
+.g-ap h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.g-dp .g-mu,
+.g-ap .g-mu {
+  margin: 4px 0 0;
+}
+
+.g-av {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  font-size: 56px;
+}
+
+.g-dn .g-o,
+.g-dn .g-o > .icon {
+  color: var(--danger-color);
+}
+
+.g-si,
+.g-dv {
+  display: flex;
+  min-height: 100%;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 40px 24px;
+  color: var(--g2);
+  background: var(--g5);
+  overflow: hidden auto;
+  text-align: center;
+}
+
+:is(.g-si, .g-dv) > * {
+  max-width: 360px;
+}
+
+.g-logo {
+  width: 72px;
+  height: 72px;
+  flex: 0 0 72px;
+  color: var(--g1);
+  background: var(--g4);
+  border-radius: 18px;
+  font-size: 2.65rem;
+}
+
+:is(.g-si, .g-dv) h2 {
+  margin: 20px 0 0;
+  font-size: 1.35rem;
+  line-height: 1.35;
+}
+
+.g-auth-copy {
+  margin: 10px 0 0;
+  line-height: 1.5;
+  opacity: 0.72;
+}
+
+:is(.g-si, .g-dv) > .g-a {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 16px;
+}
+
+:is(.g-si, .g-dv) > .g-a.text {
+  margin-top: 8px;
+}
+
+.g-st {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 24px 16px;
+  color: var(--g6);
+  text-align: center;
+}
+
+.g-st > .icon {
+  margin-bottom: 8px;
+  color: var(--g1);
+  font-size: 1.65rem;
+}
+
+.g-st > p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.g-st > .g-a {
+  margin-top: 12px;
+}
+
+.g-code {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--g3);
+  border-radius: 8px;
+  color: var(--g1);
+  background: var(--popup-background-color);
+  font-family: var(--editor-font-family, monospace);
+  font-size: 1.65rem;
+  letter-spacing: 0.09em;
+  user-select: all;
+}
+
+.g-code + .g-mu {
+  margin-top: 8px;
+}
+
+.g-sk {
+  display: flex;
+  height: 64px;
+  align-items: center;
+  padding: 0 16px;
+}
+
+.g-sk:not(:last-child) {
+  border-bottom: 1px solid var(--g3);
+}
+
+.g-sk::before {
+  display: block;
+  width: 58%;
+  height: 11px;
+  border-radius: 6px;
+  background: var(--g3);
+  content: "";
+}
+
+.g-er,
+.g-er > .icon {
+  color: var(--error-text-color);
+}
+
+:is(.g-o, .g-a, .g-t, .g-it > [data-action="github-overflow"]):active {
+  background: var(--g4);
+}
+
+.g-a.primary:active {
+  background: var(--button-active-color);
+}
+
+@media (min-width: 720px) {
+  .g-w:not([data-route="root"]) .g-ts {
+    display: flex;
+  }
+
+  .g-w[data-route] .g-m {
+    display: block;
+    width: var(--gp);
+    flex: 0 0 var(--gp);
+    border-right: 1px solid var(--g3);
+  }
+
+  .g-d {
+    display: block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .g-ts > .tab-indicator {
+    transition: none;
+  }
+}
