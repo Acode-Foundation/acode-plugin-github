@@ -340,8 +340,121 @@ test('a confirmed invalid provisional PAT opens account recovery', async () => {
       );
 
       assert.equal(await controller.getAccount(), null);
-      assert.equal(values.get('github-token'), 'legacy-token');
+      assert.equal(values.has('github-token'), false);
       assert.equal(accounts.at(-1), null);
+
+      const restarted = new GitHubAccountController({
+        authManager,
+        createGitHub: () => ({}),
+        legacyStore: createStore(values),
+      });
+      assert.equal(await restarted.initialize(), null);
+    },
+  );
+});
+
+test('an invalid background migration removes the legacy PAT permanently', async () => {
+  const values = new Map([['github-token', 'legacy-token']]);
+  const authManager = createAuthManager([]);
+  authManager.usePersonalAccessToken = async () => {
+    throw Object.assign(new Error('invalid token'), { kind: 'invalid-token' });
+  };
+
+  await withSourceModule(
+    'githubAccount.js',
+    { localStorage: createStore(values) },
+    async ({ GitHubAccountController }) => {
+      const controller = new GitHubAccountController({
+        authManager,
+        createGitHub: () => ({}),
+        legacyStore: createStore(values),
+      });
+      await controller.initialize();
+
+      assert.equal(await controller.run(() => 'loaded'), 'loaded');
+      await settle();
+
+      assert.equal(await controller.getAccount(), null);
+      assert.equal(values.has('github-token'), false);
+
+      const restarted = new GitHubAccountController({
+        authManager,
+        createGitHub: () => ({}),
+        legacyStore: createStore(values),
+      });
+      assert.equal(await restarted.initialize(), null);
+    },
+  );
+});
+
+test('legacy PAT invalidation stays signed out when cleanup fails', async () => {
+  const values = new Map([['github-token', 'legacy-token']]);
+  const authManager = createAuthManager([]);
+  const legacyStore = {
+    ...createStore(values),
+    removeItem() {
+      throw new Error('storage unavailable');
+    },
+  };
+
+  await withSourceModule(
+    'githubAccount.js',
+    { localStorage: legacyStore },
+    async ({ GitHubAccountController }) => {
+      const controller = new GitHubAccountController({
+        authManager,
+        createGitHub: () => ({}),
+        legacyStore,
+      });
+      await controller.initialize();
+
+      await assert.rejects(
+        controller.run(() => {
+          throw Object.assign(new Error('unauthorized'), { status: 401 });
+        }),
+        hasKind('storage'),
+      );
+
+      assert.equal(await controller.getAccount(), null);
+      assert.equal(values.get('github-token'), 'legacy-token');
+    },
+  );
+});
+
+test('a stale legacy rejection cannot clear replacement credentials', async () => {
+  const values = new Map([['github-token', 'legacy-token']]);
+  const operationStarted = deferred();
+  const releaseOperation = deferred();
+  const authManager = createAuthManager([]);
+
+  await withSourceModule(
+    'githubAccount.js',
+    { localStorage: createStore(values) },
+    async ({ GitHubAccountController }) => {
+      const controller = new GitHubAccountController({
+        authManager,
+        createGitHub: () => ({}),
+        legacyStore: createStore(values),
+      });
+      const accounts = [];
+      controller.subscribe((account) => accounts.push(account));
+      await controller.initialize();
+
+      const stale = controller.run(async () => {
+        operationStarted.resolve();
+        await releaseOperation.promise;
+        throw Object.assign(new Error('unauthorized'), { status: 401 });
+      });
+      const staleRejection = assert.rejects(stale, hasKind('cancelled'));
+      await operationStarted.promise;
+
+      await controller.usePersonalAccessToken('replacement-token');
+      releaseOperation.resolve();
+      await staleRejection;
+
+      assert.equal((await controller.getAccount()).login, 'octocat');
+      assert.equal(values.has('github-token'), false);
+      assert.equal(accounts.at(-1).login, 'octocat');
     },
   );
 });

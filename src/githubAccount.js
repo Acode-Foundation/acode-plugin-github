@@ -168,27 +168,30 @@ export class GitHubAccountController {
     for (const listener of this.#listeners) listener(account);
   }
 
-  async #runLegacyOperation(operation, token) {
+  async #runLegacyOperation(operation, token, epoch) {
     let result;
     try {
       result = await operation(this.#createGitHub(token));
     } catch (error) {
       if (isAuthenticationError(error)) {
-        this.#credentialEpoch += 1;
-        this.#legacyToken = '';
-        this.#account = null;
-        this.#setAccount(null);
+        if (!this.#invalidateLegacyToken(token, epoch)) {
+          throw new GitHubAuthError('cancelled');
+        }
         throw new GitHubAuthError('invalid-token');
       }
       throw error;
     }
-    this.#finalizeLegacyToken(token);
+    this.#finalizeLegacyToken(token, epoch);
     return result;
   }
 
   #runOperation(operation, write) {
     if (this.#legacyToken) {
-      return this.#runLegacyOperation(operation, this.#legacyToken);
+      return this.#runLegacyOperation(
+        operation,
+        this.#legacyToken,
+        this.#credentialEpoch,
+      );
     }
     return this.#authManager.runWithToken(
       (token) => operation(this.#createGitHub(token)),
@@ -221,9 +224,14 @@ export class GitHubAccountController {
     }
   }
 
-  #finalizeLegacyToken(token) {
-    if (this.#legacyMigration || token !== this.#legacyToken) return;
-    const epoch = this.#credentialEpoch;
+  #finalizeLegacyToken(token, epoch) {
+    if (
+      this.#legacyMigration ||
+      epoch !== this.#credentialEpoch ||
+      token !== this.#legacyToken
+    ) {
+      return;
+    }
     const migration = this.#authManager
       .usePersonalAccessToken(token)
       .then((account) => {
@@ -248,10 +256,7 @@ export class GitHubAccountController {
         ) {
           return;
         }
-        this.#credentialEpoch += 1;
-        this.#legacyToken = '';
-        this.#account = null;
-        this.#setAccount(null);
+        this.#invalidateLegacyToken(token, epoch, false);
       })
       .finally(() => {
         if (this.#legacyMigration === migration) {
@@ -259,6 +264,25 @@ export class GitHubAccountController {
         }
       });
     this.#legacyMigration = migration;
+  }
+
+  #invalidateLegacyToken(token, epoch, reportStorageError = true) {
+    if (epoch !== this.#credentialEpoch || token !== this.#legacyToken) {
+      return false;
+    }
+
+    this.#credentialEpoch += 1;
+    this.#legacyToken = '';
+    this.#account = null;
+    let cleanupError;
+    try {
+      this.#removeLegacyToken();
+    } catch (error) {
+      cleanupError = error;
+    }
+    this.#setAccount(null);
+    if (cleanupError && reportStorageError) throw cleanupError;
+    return true;
   }
 
   #removeLegacyToken() {
