@@ -6,30 +6,39 @@
   "repository": "https://github.com/deadlyjack/acode-plugin-github.git",
   "author": "Ajit <me@ajitkumar.dev>",
   "license": "MIT",
+  "packageManager": "npm@12.0.2",
+  "engines": {
+    "node": "^24.18.0 || >=26.0.0"
+  },
   "dependencies": {
-    "github-api": "^3.4.0",
-    "html-tag-js": "^1.1.37",
-    "mime-types": "^2.1.35"
+    "@octokit/core": "^7.0.7",
+    "@octokit/plugin-paginate-rest": "^15.0.0",
+    "@stablelib/aes": "2.0.1",
+    "@stablelib/siv": "2.0.1",
+    "core-js": "^3.50.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.21.0",
-    "@babel/plugin-transform-runtime": "^7.21.0",
-    "@babel/preset-env": "^7.18.10",
-    "babel-loader": "^9.1.2",
+    "@babel/core": "^8.0.1",
+    "@babel/preset-env": "^8.0.2",
+    "@biomejs/biome": "^2.5.8",
+    "babel-loader": "^10.1.1",
+    "babel-plugin-polyfill-corejs3": "^1.0.0",
+    "happy-dom": "^20.11.2",
     "jszip": "^3.10.1",
-    "live-server": "^1.2.2",
-    "path-browserify": "^1.0.1",
-    "webpack": "^5.76.0",
-    "webpack-cli": "^5.0.1"
+    "serve-handler": "^6.1.7",
+    "terser-webpack-plugin": "^5.6.1",
+    "webpack": "^5.109.2",
+    "webpack-cli": "^7.2.2"
   },
   "scripts": {
-    "build": "webpack",
-    "build-release": "webpack --mode production",
-    "start-dev": "node .vscode/start-dev"
+    "build": "webpack --mode production",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "deps:audit": "npm audit --audit-level=low",
+    "deps:outdated": "npm outdated --json",
+    "dev": "node scripts/dev/dev.js",
+    "dev:release": "node scripts/dev/dev.js --release",
+    "test": "node --test"
   },
-  "browserslist": "cover 100%,not android < 5",
-  "resolutions": {
-    "terser": ">=5.16.6",
-    "glob-parent": ">=5.1.2"
-  }
+  "browserslist": "cover 100%,not android < 5"
 }

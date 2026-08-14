@@ -1,6 +1,4 @@
 {
-  "dart.lineLength": 50,
-  "prettier.printWidth": 50,
   "cSpell.words": [
     "acode",
     "Ajit",
@@ -14,4 +12,12 @@
     "selectrepo",
     "updatetoken"
   ],
+  "[javascript][typescript][json][jsonc]": {
+    "editor.defaultFormatter": "biomejs.biome",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.biome": "explicit",
+      "source.organizeImports.biome": "explicit"
+    }
+  }
 }

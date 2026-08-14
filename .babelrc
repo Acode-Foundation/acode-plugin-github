@@ -1,19 +1,19 @@
 {
   "presets": [
-    "@babel/preset-env"
-  ],
-  "env": {
-    "test": {
-      "presets": [
-        "@babel/env"
-      ]
-    }
-  },
-  "plugins": [
-    "html-tag-js/jsx/jsx-to-tag.js",
-    "html-tag-js/jsx/syntax-parser.js",
     [
-      "@babel/plugin-transform-runtime"
+      "@babel/preset-env",
+      {
+        "targets": "cover 100%, not android < 5"
+      }
+    ]
+  ],
+  "plugins": [
+    [
+      "babel-plugin-polyfill-corejs3",
+      {
+        "method": "usage-global",
+        "version": "3.50"
+      }
     ]
   ],
   "compact": false
