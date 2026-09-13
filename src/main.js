@@ -110,9 +110,8 @@ export class AcodePlugin {
     this.#authManager?.configure?.();
     this.commands.forEach((command) => {
       editorManager.editor.commands.addCommand(command);
-    });
-    
-await this.initFs();
+    });    
+    await this.initFs();
     let account;
     try {
       account = await this.#account.initialize();
