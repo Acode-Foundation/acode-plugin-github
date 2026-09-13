@@ -111,7 +111,8 @@ export class AcodePlugin {
     this.commands.forEach((command) => {
       editorManager.editor.commands.addCommand(command);
     });
-
+    
+await this.initFs();
     let account;
     try {
       account = await this.#account.initialize();
@@ -124,7 +125,7 @@ export class AcodePlugin {
     this.#data.setAccount(account, this.#accountGeneration);
     this.#resumeAuth.module ||= acode.require('intent');
     this.#resumeAuth.module?.addHandler?.(this.#resumeAuth.intent);
-    await this.initFs();
+    
     this.#githubPage = this.#createGitHubPage({
       config: githubAuthConfig,
       onHide: () => this.#githubLauncher?.pageHidden(),
